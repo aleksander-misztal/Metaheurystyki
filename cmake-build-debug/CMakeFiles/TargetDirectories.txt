@@ -1,3 +1,0 @@
-/Users/aleksandermisztal/Documents/Studia/Metaheurystyki/cmake-build-debug/CMakeFiles/Metaheurystyki.dir
-/Users/aleksandermisztal/Documents/Studia/Metaheurystyki/cmake-build-debug/CMakeFiles/edit_cache.dir
-/Users/aleksandermisztal/Documents/Studia/Metaheurystyki/cmake-build-debug/CMakeFiles/rebuild_cache.dir
