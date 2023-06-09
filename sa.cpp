@@ -1,6 +1,3 @@
-// clang++ -std=c++11 sa.cpp -o program
-// ./program 6 100.0 0.95
-
 #include <iostream>
 #include <vector>
 #include <cstdlib>
@@ -72,12 +69,12 @@ std::vector<int> getRandomWorkingPoint(const std::vector<int> &currentSubset, co
 
     std::random_device rd;
     std::mt19937 gen(rd());
-    std::uniform_int_distribution<int> dis(0, currentSubset.size() - 1);
+    std::normal_distribution<double> dis(0.5, 0.1); // Rozkład normalny
 
     for (int i = 0; i < currentSubset.size(); i++)
     {
-        double randomValue = dis(gen) / static_cast<double>(currentSubset.size());
-        workingPoint[i] = (randomValue >= 0.5) ? 1 : 0; // Wybór losowej wartości (0 lub 1) na podstawie prawdopodobieństwa
+        double randomValue = dis(gen);
+        workingPoint[i] = (randomValue >= 0.5) ? 1 : 0; // Wybór losowej wartości (0 lub 1) na podstawie rozkładu normalnego
     }
 
     return workingPoint;
