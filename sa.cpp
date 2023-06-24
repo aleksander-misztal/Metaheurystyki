@@ -7,80 +7,128 @@
 #include <fstream>
 #include <sstream>
 #include <cmath>
+#include <random>
 
-// Generuje podzbiór o zadanym rozmiarze na podstawie danego zbioru
-std::vector<int> generateSubset(const std::vector<int> &set, int subsetSize)
+void printVector(std::vector<int> v)
 {
-    std::vector<int> subset(set);
-    std::shuffle(subset.begin(), subset.end(), std::mt19937(std::time(0))); // Przetasowanie elementów w celu wygenerowania losowego podzbioru
-    subset.resize(subsetSize);
-    return subset;
+    std::cout << std::endl;
+    for (int e : v)
+    {
+        std::cout << e << ", ";
+    }
+    std::cout << std::endl;
 }
 
-// Oblicza sumę elementów w podzbiorze
-int calculateSubsetSum(const std::vector<int> &subset)
+int calculateSum(const std::vector<int> &set, const std::vector<int> &neighbor)
 {
     int sum = 0;
-    for (int num : subset)
+    for (size_t i = 0; i < neighbor.size(); ++i)
     {
-        sum += num;
+        sum += set[i] * neighbor[i];
     }
     return sum;
 }
 
-// Znajduje losowego sąsiada aktualnego podzbioru na podstawie zbioru wejściowego
-std::vector<int> findRandomNeighbor(const std::vector<int> &currentSubset, const std::vector<int> &set, int targetSum)
+double calculateCostDifference(int currentSum, int newSum, int targetSum, double temperature)
 {
-    std::vector<int> bestNeighbor = currentSubset;
-    int bestSum = calculateSubsetSum(currentSubset);
+    return (currentSum - newSum) / temperature;
+}
 
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_int_distribution<int> dis(0, currentSubset.size() - 1);
+std::vector<int> findBestNeighbor(const std::vector<int> &set, const std::vector<int> &subset, int targetSum)
+{
+    std::vector<int> newNeighbor;
+    std::vector<int> bestNeighbor;
+    int bestSum = calculateSum(set, subset);
+    int neighborSum;
 
-    std::vector<std::vector<int>> neighbors;
-    for (int i = 0; i < currentSubset.size(); i++)
+    for (int i = 0; i < set.size(); i++)
     {
-        std::vector<int> neighbor = currentSubset;
-        neighbor[i] = (neighbor[i] == 0) ? 1 : 0; // Zamiana wartości na przeciwną (0 na 1 i odwrotnie)
+        newNeighbor = subset;
+        newNeighbor[i] = (subset[i] == 0) ? 1 : 0;
+        neighborSum = calculateSum(set, newNeighbor);
 
-        neighbors.push_back(neighbor);
-    }
-
-    std::shuffle(neighbors.begin(), neighbors.end(), gen); // Przetasowanie sąsiadów w celu wyboru losowego
-
-    for (const auto &neighbor : neighbors)
-    {
-        int neighborSum = calculateSubsetSum(neighbor);
         if (std::abs(neighborSum - targetSum) < std::abs(bestSum - targetSum))
         {
-            bestNeighbor = neighbor;
             bestSum = neighborSum;
+            bestNeighbor = newNeighbor;
         }
     }
 
     return bestNeighbor;
 }
 
-// Generuje losowy punkt roboczy na podstawie aktualnego podzbioru
-std::vector<int> getRandomWorkingPoint(const std::vector<int> &currentSubset, const std::vector<int> &set, int targetSum)
+// Funkcje temperatury dla różnych schematów
+double logarithmicTemperature(int k)
 {
-    std::vector<int> workingPoint = currentSubset;
-
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::normal_distribution<double> dis(0.5, 0.1); // Rozkład normalny
-
-    for (int i = 0; i < currentSubset.size(); i++)
-    {
-        double randomValue = dis(gen);
-        workingPoint[i] = (randomValue >= 0.5) ? 1 : 0; // Wybór losowej wartości (0 lub 1) na podstawie rozkładu normalnego
-    }
-
-    return workingPoint;
+    return 1.0 / std::log(k);
 }
 
-// Odczytuje zbiór liczb z pliku tekstowego
+double linearTemperature(int k)
+{
+    return 1.0 / k;
+}
+
+double geometricTemperature(int k, double a)
+{
+    return std::pow(a, k);
+}
+
+std::vector<int> solveSubsetSumProblem(const std::vector<int> &set, int targetSum, double initialTemperature, double coolingRate, int temperatureScheme)
+{
+    int setLength = set.size();
+    std::vector<int> bestSubset(setLength, 1);
+    std::vector<int> currentSubset = bestSubset;
+
+    int currentSum = calculateSum(set, currentSubset);
+    double currentCost = std::numeric_limits<double>::max();
+
+    std::random_device rd;
+    std::mt19937 generator(rd());
+    std::uniform_real_distribution<double> distribution(0.0, 1.0);
+
+    double temperature = initialTemperature;
+    int iteration = 1;
+
+    while (temperature > 0.1)
+    {
+        for (int i = 0; i < 100; ++i)
+        {
+            std::vector<int> newNeighbor = findBestNeighbor(set, currentSubset, targetSum);
+            int newSum = calculateSum(set, newNeighbor);
+            double costDifference = calculateCostDifference(currentSum, newSum, targetSum, temperature);
+
+            if (costDifference > 0 || std::exp(costDifference / temperature) > distribution(generator))
+            {
+                currentSubset = newNeighbor;
+                currentSum = newSum;
+                currentCost = costDifference;
+            }
+
+            if (currentSum == targetSum)
+            {
+                return currentSubset;
+            }
+        }
+
+        // Calculate new temperature based on the selected scheme
+        if (temperatureScheme == 1)
+        {
+            temperature = logarithmicTemperature(iteration);
+        }
+        else if (temperatureScheme == 2)
+        {
+            temperature = linearTemperature(iteration);
+        }
+        else if (temperatureScheme == 3)
+        {
+            temperature = geometricTemperature(iteration, coolingRate);
+        }
+        iteration++;
+    }
+
+    return currentSubset;
+}
+
 std::vector<int> readSetFromFile(const std::string &filename)
 {
     std::vector<int> set;
@@ -107,67 +155,33 @@ std::vector<int> readSetFromFile(const std::string &filename)
     return set;
 }
 
-// Rozwiązuje problem podzbioru o sumie
-std::vector<int> solveSubsetSumProblem(const std::vector<int> &set, int targetSum, double initialTemperature, double coolingRate)
-{
-    std::vector<int> currentSubset = generateSubset(set, set.size());
-    std::vector<int> bestSubset = currentSubset;
-
-    double temperature = initialTemperature;
-
-    while (temperature > 0.1)
-    {
-        std::vector<int> nextSubset = findRandomNeighbor(currentSubset, set, targetSum);
-        int currentSum = calculateSubsetSum(currentSubset);
-        int nextSum = calculateSubsetSum(nextSubset);
-
-        double acceptanceProbability = std::exp((nextSum - currentSum) / temperature); // Oblicza prawdopodobieństwo akceptacji nowego podzbioru
-
-        if (std::abs(nextSum - targetSum) < 0.0001 || acceptanceProbability > static_cast<double>(std::rand()) / RAND_MAX)
-        {
-            currentSubset = nextSubset; // Aktualizuje podzbiór na podstawie wybranego sąsiada
-        }
-
-        if (std::abs(nextSum - targetSum) < std::abs(calculateSubsetSum(bestSubset) - targetSum))
-        {
-            bestSubset = nextSubset; // Aktualizuje najlepszy podzbiór, jeśli znaleziono lepsze rozwiązanie
-        }
-
-        temperature *= coolingRate; // Obniża temperaturę
-    }
-
-    return bestSubset;
-}
-
 int main(int argc, char *argv[])
 {
-    if (argc < 4)
+    if (argc < 5)
     {
-        std::cout << "Użycie: ./program <targetSum> <initialTemperature> <coolingRate>" << std::endl; // Wyświetla komunikat o poprawnym użyciu programu w przypadku braku argumentów
+        std::cout << "Podaj żądaną sumę: ./program <targetSum> <initialTemperature> <coolingRate> <temperatureScheme>" << std::endl;
         return 0;
     }
 
     int targetSum = std::stoi(argv[1]);
     double initialTemperature = std::stod(argv[2]);
     double coolingRate = std::stod(argv[3]);
+    int temperatureScheme = std::stod(argv[4]);
 
     std::vector<int> set = readSetFromFile("set.txt");
 
-    std::vector<int> subset = solveSubsetSumProblem(set, targetSum, initialTemperature, coolingRate);
+    std::vector<int> subset = solveSubsetSumProblem(set, targetSum, initialTemperature, coolingRate, temperatureScheme);
 
     if (subset.empty())
     {
-        std::cout << "Nie można znaleźć podzbioru o żądanej sumie." << std::endl; // Wyświetla komunikat informujący o niemożności znalezienia podzbioru o zadanej sumie
+        std::cout << "Nie można znaleźć podzbioru o żądanej sumie." << std::endl;
     }
     else
     {
         std::cout << "Podzbiór: ";
         for (int num : subset)
         {
-            if (num != 0)
-            {
-                std::cout << num << " "; // Wyświetla znalezione liczby z podzbioru
-            }
+            std::cout << num << " ";
         }
         std::cout << std::endl;
     }

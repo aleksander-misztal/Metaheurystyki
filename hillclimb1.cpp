@@ -7,46 +7,74 @@
 #include <fstream>
 #include <sstream>
 
-// Funkcja generująca losowy podzbiór o określonym rozmiarze
-std::vector<int> generateSubset(const std::vector<int> &set, int subsetSize)
+void printVector(std::vector<int> v)
 {
-    std::vector<int> subset(set);
-    std::shuffle(subset.begin(), subset.end(), std::mt19937(std::time(0))); // Użycie generatora mt do mieszania
-    subset.resize(subsetSize);
-    return subset;
+    std::cout << std::endl;
+    for (int e : v)
+    {
+        std::cout << e << ", ";
+    }
+    std::cout << std::endl;
 }
 
-// Funkcja obliczająca sumę elementów podzbioru
-int calculateSubsetSum(const std::vector<int> &subset)
+int calculateSum(const std::vector<int> &set, const std::vector<int> &neighbor)
 {
     int sum = 0;
-    for (int num : subset)
+    for (size_t i = 0; i < neighbor.size(); ++i)
     {
-        sum += num;
+        sum += set[i] * neighbor[i];
     }
     return sum;
 }
 
-// Funkcja znajdująca najlepszego sąsiada przez zmianę jednego elementu na raz
-std::vector<int> findBestNeighbor(const std::vector<int> &currentSubset, const std::vector<int> &set, int targetSum)
+std::vector<int> findBestNeighbor(const std::vector<int> &set, const std::vector<int> &subset, int targetSum)
 {
-    std::vector<int> bestNeighbor = currentSubset;
-    int bestSum = calculateSubsetSum(currentSubset);
+    std::vector<int>newNeighbor;
+    std::vector<int>bestNeighbor;
+    int bestSum = calculateSum(set, subset);
+    int neighborSum;
 
-    for (int i = 0; i < currentSubset.size(); i++)
-    {
-        std::vector<int> neighbor = currentSubset;
-        neighbor[i] = (neighbor[i] == 0) ? 1 : 0; // Zmiana jednego elementu
+    for(int i=0 ; i<set.size() ; i++){
+        std::cout<<"Neighbour:"<<i;
+        newNeighbor = subset;
+        newNeighbor[i] = (subset[i] == 0) ? 1 : 0;
+        printVector(newNeighbor);
+        neighborSum = calculateSum(set, newNeighbor);
+        std::cout<<"SUMA: "<<neighborSum<<std::endl;
 
-        int neighborSum = calculateSubsetSum(neighbor);
-        if (std::abs(neighborSum - targetSum) < std::abs(bestSum - targetSum))
-        {
-            bestNeighbor = neighbor;
+        if (std::abs(neighborSum - targetSum) < std::abs(bestSum - targetSum)){
             bestSum = neighborSum;
+            bestNeighbor = newNeighbor;
         }
     }
-
+    std::cout<<std::endl;
+    std::cout<<"BEST SUM : "<<bestSum<<std::endl;
+    std::cout<<"BEST SUBSET"<<std::endl;
+    printVector(bestNeighbor);
+    std::cout<<std::endl;
+    std::cout<<std::endl;
     return bestNeighbor;
+}
+
+// Funkcja rozwiązująca problem sumy podzbioru przy użyciu algorytmu hill climbing
+std::vector<int> solveSubsetSumProblem(const std::vector<int> &set, int targetSum)
+{
+    int set_length = set.size();
+    std::vector<int>bestSubset = set;
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> dis(0, 1); // Distribution for generating random numbers 0 or 1
+
+    for (int i = 0; i < set_length; i++) {
+        bestSubset[i] = dis(gen); // Set element at index i to a random number (0 or 1)
+    }
+
+    while(calculateSum(set, bestSubset) != targetSum){
+        std::vector<int> bestNeighbor = findBestNeighbor(set, bestSubset, targetSum);
+        bestSubset = bestNeighbor;
+
+    }
+    return bestSubset;
 }
 
 // Funkcja odczytująca zbiór z pliku
@@ -74,40 +102,6 @@ std::vector<int> readSetFromFile(const std::string &filename)
     inputFile.close();
 
     return set;
-}
-
-// Funkcja rozwiązująca problem sumy podzbioru przy użyciu algorytmu hill climbing
-std::vector<int> solveSubsetSumProblem(const std::vector<int> &set, int targetSum)
-{
-    std::vector<int> currentSubset = generateSubset(set, set.size());
-
-    while (calculateSubsetSum(currentSubset) != targetSum)
-    {
-        std::vector<int> nextSubset = findBestNeighbor(currentSubset, set, targetSum);
-        if (calculateSubsetSum(nextSubset) >= calculateSubsetSum(currentSubset))
-        {
-            break; // Osiągnięto lokalne optimum, zatrzymaj
-        }
-        currentSubset = nextSubset;
-    }
-
-    if (calculateSubsetSum(currentSubset) == targetSum)
-    {
-        // Usuwanie zer z podzbioru
-        std::vector<int> finalSubset;
-        for (int num : currentSubset)
-        {
-            if (num != 0)
-            {
-                finalSubset.push_back(num);
-            }
-        }
-        return finalSubset;
-    }
-    else
-    {
-        return {}; // Zwróć pusty wektor, aby wskazać, że nie można znaleźć podzbioru o żądanej sumie
-    }
 }
 
 int main(int argc, char *argv[])

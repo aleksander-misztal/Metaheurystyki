@@ -7,79 +7,98 @@
 #include <fstream>
 #include <sstream>
 #include <unordered_set>
-#include <cmath>
 
-// Struktura reprezentująca ruch w algorytmie Tabu
-struct TabuMove
+void printVector(std::vector<int> v)
 {
-    int index;
-    int value;
-};
-
-// Funkcja haszująca dla std::vector<int>
-struct VectorHasher
-{
-    std::size_t operator()(const std::vector<int> &vec) const
+    std::cout << std::endl;
+    for (int e : v)
     {
-        std::size_t seed = vec.size();
-        for (const int &i : vec)
-        {
-            seed ^= i + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-        }
-        return seed;
+        std::cout << e << ", ";
     }
-};
-
-// Funkcja generująca losowy podzbiór o określonym rozmiarze
-std::vector<int> generateSubset(const std::vector<int> &set, int subsetSize)
-{
-    std::vector<int> subset(set);
-    std::shuffle(subset.begin(), subset.end(), std::mt19937(std::time(0)));
-    subset.resize(subsetSize);
-    return subset;
+    std::cout << std::endl;
 }
 
-// Funkcja obliczająca sumę elementów podzbioru
-int calculateSubsetSum(const std::vector<int> &subset)
+int calculateSum(const std::vector<int> &set, const std::vector<int> &neighbor)
 {
     int sum = 0;
-    for (int num : subset)
+    for (size_t i = 0; i < neighbor.size(); ++i)
     {
-        sum += num;
+        sum += set[i] * neighbor[i];
     }
     return sum;
 }
 
-// Funkcja znajdująca najlepszego sąsiada przez zmianę całego podzbioru o rozmiarze 1
-std::vector<int> findBestNeighbor(const std::vector<int> &currentSubset, const std::vector<int> &set, int targetSum, const std::unordered_set<std::vector<int>, VectorHasher> &tabuList)
+std::vector<int> findBestNeighbor(const std::vector<int> &set, const std::vector<int> &subset, int targetSum, const std::unordered_set<std::string>& tabuList)
 {
-    std::vector<int> bestNeighbor = currentSubset;
-    int bestSum = calculateSubsetSum(currentSubset);
+    std::vector<int> newNeighbor;
+    std::vector<int> bestNeighbor;
+    int bestSum = calculateSum(set, subset);
+    int neighborSum;
 
-    for (int i = 0; i < currentSubset.size(); i++)
-    {
-        std::vector<int> neighbor = currentSubset;
-        neighbor.erase(neighbor.begin() + i);
+    for (int i = 0; i < set.size(); ++i) {
+        newNeighbor = subset;
+        newNeighbor[i] = (subset[i] == 0) ? 1 : 0;
 
-        if (tabuList.find(neighbor) == tabuList.end())
-        {
-            std::unordered_set<int> uniqueNums(neighbor.begin(), neighbor.end());
-            if (uniqueNums.size() == neighbor.size())
-            {
-                int neighborSum = calculateSubsetSum(neighbor);
-                if (std::abs(neighborSum - targetSum) < std::abs(bestSum - targetSum))
-                {
-                    bestNeighbor = neighbor;
-                    bestSum = neighborSum;
-                }
-            }
+        // Convert the newNeighbor vector to a string representation
+        std::stringstream ss;
+        for (int num : newNeighbor) {
+            ss << num;
+        }
+        std::string neighborString = ss.str();
+
+        // Check if the neighbor is in the tabu list
+        if (tabuList.find(neighborString) != tabuList.end()) {
+            continue;  // Skip this neighbor if it's in the tabu list
+        }
+
+        neighborSum = calculateSum(set, newNeighbor);
+
+        if (std::abs(neighborSum - targetSum) < std::abs(bestSum - targetSum)) {
+            bestSum = neighborSum;
+            bestNeighbor = newNeighbor;
         }
     }
 
     return bestNeighbor;
 }
 
-// Funkcja odczytująca zbiór z pliku
+std::vector<int> solveSubsetSumProblem(const std::vector<int> &set, int targetSum, int tabuSize)
+{
+    int set_length = set.size();
+    std::vector<int> bestSubset(set_length, 1);
+
+    std::unordered_set<std::string> tabuList;
+    int iterations = 0;
+
+    while (calculateSum(set, bestSubset) != targetSum) {
+        std::vector<int> bestNeighbor = findBestNeighbor(set, bestSubset, targetSum, tabuList);
+        bestSubset = bestNeighbor;
+
+        // Add the current best neighbor to the tabu list
+        std::stringstream ss;
+        for (int num : bestNeighbor) {
+            ss << num;
+        }
+        std::string neighborString = ss.str();
+        tabuList.insert(neighborString);
+
+        // Remove the oldest tabu elements if the tabu list exceeds the tabu size
+        if (tabuList.size() > tabuSize && tabuSize != -1) {
+            auto it = tabuList.begin();
+            tabuList.erase(it);
+        }
+
+        iterations++;
+
+        // Add a stopping condition to prevent infinite loops
+        if (iterations >= 1000) {
+            break;
+        }
+    }
+
+    return bestSubset;
+}
+
 std::vector<int> readSetFromFile(const std::string &filename)
 {
     std::vector<int> set;
@@ -92,86 +111,38 @@ std::vector<int> readSetFromFile(const std::string &filename)
     }
 
     std::string line;
-    while (std::getline(inputFile, line))
+    if (std::getline(inputFile, line))
     {
         std::stringstream ss(line);
-        std::string numStr;
-        while (std::getline(ss, numStr, ','))
+        std::string number;
+        while (std::getline(ss, number, ','))
         {
-            int num = std::stoi(numStr);
-            set.push_back(num);
+            set.push_back(std::stoi(number));
         }
     }
+    inputFile.close();
 
     return set;
 }
 
-// Funkcja rozwiązująca problem sumy podzbioru za pomocą algorytmu Tabu Search
-std::vector<int> solveSubsetSumProblem(const std::vector<int> &set, int targetSum, int tabuSize, int maxIterations)
-{
-    std::vector<int> currentSubset = generateSubset(set, set.size() / 2);
-    std::unordered_set<std::vector<int>, VectorHasher> tabuList;
-    int tabuCount = 0;
-    std::vector<int> bestSubset = currentSubset;
-    int bestSum = calculateSubsetSum(currentSubset);
-    std::vector<int> lastWorkingSubset = currentSubset;
-    int lastWorkingSum = calculateSubsetSum(currentSubset);
-
-    int iteration = 0;
-    while (iteration < maxIterations)
-    {
-        std::vector<int> nextSubset = findBestNeighbor(currentSubset, set, targetSum, tabuList);
-        if (calculateSubsetSum(nextSubset) == targetSum)
-        {
-            return nextSubset;
-        }
-
-        tabuList.insert(nextSubset);
-        if (tabuList.size() > tabuSize)
-        {
-            auto it = tabuList.begin();
-            tabuList.erase(it);
-        }
-
-        if (std::abs(calculateSubsetSum(nextSubset) - targetSum) < std::abs(bestSum - targetSum))
-        {
-            bestSubset = nextSubset;
-            bestSum = calculateSubsetSum(nextSubset);
-        }
-
-        currentSubset = nextSubset;
-
-        tabuCount++;
-        if (tabuCount >= tabuSize || tabuList.find(bestSubset) != tabuList.end() || tabuList.find(lastWorkingSubset) != tabuList.end())
-        {
-            currentSubset = lastWorkingSubset;
-            tabuCount = 0;
-        }
-        else if (calculateSubsetSum(nextSubset) == lastWorkingSum)
-        {
-            lastWorkingSubset = nextSubset;
-        }
-
-        iteration++;
-    }
-
-    return bestSubset;
-}
-
 int main(int argc, char *argv[])
 {
-    if (argc < 4)
+    // Sprawdzenie, czy targetSum i tabuSize są podane jako argumenty wiersza poleceń
+    if (argc < 3)
     {
-        std::cout << "Podaj żądaną sumę, rozmiar tabu i maksymalną liczbę iteracji: ./program <targetSum> <tabuSize> <maxIterations>" << std::endl;
+        std::cout << "Podaj żądaną sumę oraz rozmiar tabu: ./program <targetSum> <tabuSize>" << std::endl;
         return 0;
     }
 
+    // Parsowanie targetSum i tabuSize
     int targetSum = std::stoi(argv[1]);
     int tabuSize = std::stoi(argv[2]);
-    int maxIterations = std::stoi(argv[3]);
 
+    // Odczytanie zbioru z pliku
     std::vector<int> set = readSetFromFile("set.txt");
-    std::vector<int> subset = solveSubsetSumProblem(set, targetSum, tabuSize, maxIterations);
+
+    // Przykładowe użycie
+    std::vector<int> subset = solveSubsetSumProblem(set, targetSum, tabuSize);
 
     if (subset.empty())
     {
@@ -179,25 +150,12 @@ int main(int argc, char *argv[])
     }
     else
     {
-        int subsetSum = calculateSubsetSum(subset);
-        std::cout << "Suma podzbioru: " << subsetSum << std::endl;
-
-        if (subsetSum == targetSum)
+        std::cout << "Podzbiór: ";
+        for (int num : subset)
         {
-            std::cout << "Podzbiór: ";
-            for (int num : subset)
-            {
-                if (num != 0)
-                {
-                    std::cout << num << " ";
-                }
-            }
-            std::cout << std::endl;
+            std::cout << num << " ";
         }
-        else
-        {
-            std::cout << "Nie można znaleźć podzbioru o żądanej sumie." << std::endl;
-        }
+        std::cout << std::endl;
     }
 
     return 0;

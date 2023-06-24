@@ -1,198 +1,265 @@
 #include <iostream>
 #include <vector>
 #include <random>
+#include <algorithm>
+#include <fstream>
+#include <sstream>
 
 using namespace std;
 
-// Jednopunktowe krzyżowanie
-vector<int> crossoverSinglePoint(const vector<int> &parent1, const vector<int> &parent2, int crossoverPoint)
+// Function to generate a random population of individuals
+vector<vector<int>> initializePopulation(int populationSize, int subsetSize)
 {
+    random_device rd;
+    mt19937 gen(rd());
+    uniform_int_distribution<> dis(0, 1);
+
+    vector<vector<int>> population(populationSize, vector<int>(subsetSize));
+
+    for (int i = 0; i < populationSize; ++i)
+    {
+        for (int j = 0; j < subsetSize; ++j)
+        {
+            population[i][j] = dis(gen);
+        }
+    }
+
+    return population;
+}
+
+// Function to evaluate the fitness of an individual (subset) based on its sum
+int evaluateFitness(const vector<int>& individual, const vector<int>& set, int targetSum)
+{
+    int currentSum = 0;
+    for (int i = 0; i < individual.size(); ++i)
+    {
+        if (individual[i])
+            currentSum += set[i];
+    }
+    return abs(targetSum - currentSum);
+}
+
+// Function to perform single-point crossover between two parents
+vector<int> performSinglePointCrossover(const vector<int>& parent1, const vector<int>& parent2)
+{
+    random_device rd;
+    mt19937 gen(rd());
+    uniform_int_distribution<> dis(1, min(parent1.size(), parent2.size()) - 1);
+
+    int crossoverPoint = dis(gen);
+
     vector<int> child(parent1.begin(), parent1.begin() + crossoverPoint);
     child.insert(child.end(), parent2.begin() + crossoverPoint, parent2.end());
+
     return child;
 }
 
-// Dwupunktowe krzyżowanie
-vector<int> crossoverTwoPoints(const vector<int> &parent1, const vector<int> &parent2, int crossoverPoint1, int crossoverPoint2)
+vector<int> performTwoPointsRandomCrossover(const vector<int>& parent1, const vector<int>& parent2)
 {
+    random_device rd;
+    mt19937 gen(rd());
+    uniform_int_distribution<> dis(1, min(parent1.size(), parent2.size()) - 2);
+
+    int crossoverPoint1 = dis(gen);
+    int crossoverPoint2 = dis(gen);
+
+    if (crossoverPoint1 > crossoverPoint2)
+        swap(crossoverPoint1, crossoverPoint2);
+
     vector<int> child(parent1.begin(), parent1.begin() + crossoverPoint1);
     child.insert(child.end(), parent2.begin() + crossoverPoint1, parent2.begin() + crossoverPoint2);
     child.insert(child.end(), parent1.begin() + crossoverPoint2, parent1.end());
+
     return child;
 }
 
-// Mutacja jednopunktowa
-void mutateSinglePoint(vector<int> &individual, int mutationPoint)
-{
-    individual[mutationPoint] = !individual[mutationPoint];
-}
-
-// Mutacja losowa
-void mutateRandom(vector<int> &individual)
+// Function to perform mutation on an individual (subset)
+void performMutation(vector<int>& individual)
 {
     random_device rd;
     mt19937 gen(rd());
     uniform_int_distribution<> dis(0, individual.size() - 1);
     int mutationPoint = dis(gen);
-    individual[mutationPoint] = !individual[mutationPoint];
+
+    if (mutationPoint >= 0 && mutationPoint < individual.size())
+        individual[mutationPoint] = !individual[mutationPoint];
 }
 
-// Sprawdza, czy suma elementów w podzbiorze równa się oczekiwanej wartości
-bool isSubsetSum(vector<int> &subset, int targetSum)
+// Function to perform flipTwoRandomPointsMutation on an individual (subset)
+void performFlipTwoRandomPointsMutation(vector<int>& individual)
 {
-    int currentSum = 0;
-    for (int element : subset)
+    random_device rd;
+    mt19937 gen(rd());
+    uniform_int_distribution<> dis(0, individual.size() - 1);
+    int mutationPoint1 = dis(gen);
+    int mutationPoint2 = dis(gen);
+
+    if (mutationPoint1 >= 0 && mutationPoint1 < individual.size() &&
+        mutationPoint2 >= 0 && mutationPoint2 < individual.size())
     {
-        currentSum += element;
-        if (currentSum == targetSum)
-            return true;
+        // Flip the values at the mutation points
+        individual[mutationPoint1] = !individual[mutationPoint1];
+        individual[mutationPoint2] = !individual[mutationPoint2];
     }
-    return false;
 }
 
-// Warunek zakończenia: Osiągnięcie maksymalnej liczby pokoleń
-bool isMaxGenerationReached(int currentGeneration, int maxGeneration)
+// Function to check if the termination condition of finding the subset is met
+bool isSubsetFoundTermination(const vector<int>& populationFitness)
 {
-    return currentGeneration >= maxGeneration;
+    // Check if any individual in the population has a fitness of 0 (subset with target sum found)
+    return find(populationFitness.begin(), populationFitness.end(), 0) != populationFitness.end();
 }
 
-// Test dla jednopunktowego krzyżowania
-void testCrossoverSinglePoint()
+// Function to check if the termination condition of reaching the maximum number of generations is met
+bool isMaxGenerationsTermination(int currentGeneration, int maxGenerations)
 {
-    vector<int> parent1 = {1, 2, 3, 4, 5};
-    vector<int> parent2 = {6, 7, 8, 9, 10};
-    int crossoverPoint = 3;
-
-    vector<int> child = crossoverSinglePoint(parent1, parent2, crossoverPoint);
-
-    cout << "Parent 1: ";
-    for (int gene : parent1)
-        cout << gene << " ";
-    cout << endl;
-
-    cout << "Parent 2: ";
-    for (int gene : parent2)
-        cout << gene << " ";
-    cout << endl;
-
-    cout << "Child: ";
-    for (int gene : child)
-        cout << gene << " ";
-    cout << endl;
+    // Check if the maximum number of generations has been reached
+    return currentGeneration >= maxGenerations;
 }
 
-// Test dla dwupunktowego krzyżowania
-void testCrossoverTwoPoints()
+// Function to select parents for crossover using tournament selection
+pair<int, int> selectParents(const vector<int>& populationFitness)
 {
-    vector<int> parent1 = {1, 2, 3, 4, 5};
-    vector<int> parent2 = {6, 7, 8, 9, 10};
-    int crossoverPoint1 = 2;
-    int crossoverPoint2 = 4;
+    random_device rd;
+    mt19937 gen(rd());
+    uniform_int_distribution<> dis(0, populationFitness.size() - 1);
 
-    vector<int> child = crossoverTwoPoints(parent1, parent2, crossoverPoint1, crossoverPoint2);
+    int parent1 = dis(gen);
+    int parent2 = dis(gen);
 
-    cout << "Parent 1: ";
-    for (int gene : parent1)
-        cout << gene << " ";
-    cout << endl;
-
-    cout << "Parent 2: ";
-    for (int gene : parent2)
-        cout << gene << " ";
-    cout << endl;
-
-    cout << "Child: ";
-    for (int gene : child)
-        cout << gene << " ";
-    cout << endl;
+    return make_pair(parent1, parent2);
 }
 
-// Test dla mutacji jednopunktowej
-void testMutateSinglePoint()
+// Function to perform the genetic algorithm for subset sum problem
+vector<int> solveSubsetSum(const vector<int>& set, int targetSum, int populationSize, int maxGenerations,
+                           int crossoverMethod, int mutationMethod, int terminationCondition)
 {
-    vector<int> individual = {1, 0, 1, 0, 1};
-    int mutationPoint = 2;
+    int subsetSize = set.size();
 
-    cout << "Before mutation: ";
-    for (int gene : individual)
-        cout << gene << " ";
-    cout << endl;
+    // Initialize population
+    vector<vector<int>> population = initializePopulation(populationSize, subsetSize);
 
-    mutateSinglePoint(individual, mutationPoint);
+    // Main loop
+    for (int generation = 0; generation < maxGenerations; ++generation)
+    {
+        // Evaluate fitness for each individual in the population
+        vector<int> populationFitness(populationSize);
+        for (int i = 0; i < populationSize; ++i)
+        {
+            populationFitness[i] = evaluateFitness(population[i], set, targetSum);
+        }
 
-    cout << "After mutation: ";
-    for (int gene : individual)
-        cout << gene << " ";
-    cout << endl;
+        // Check termination condition
+        if (terminationCondition == 1 && isSubsetFoundTermination(populationFitness))
+            break;
+        else if (terminationCondition == 2 && isMaxGenerationsTermination(generation, maxGenerations))
+            break;
+
+        // Selection and reproduction
+        vector<vector<int>> newPopulation(populationSize);
+        for (int i = 0; i < populationSize; ++i)
+        {
+            // Select parents
+            pair<int, int> parents = selectParents(populationFitness);
+            int parent1Index = parents.first;
+            int parent2Index = parents.second;
+
+            // Perform crossover
+            vector<int> child;
+            if (crossoverMethod == 1)
+                child = performSinglePointCrossover(population[parent1Index], population[parent2Index]);
+            else if (crossoverMethod == 2)
+                child = performTwoPointsRandomCrossover(population[parent1Index], population[parent2Index]);
+
+            // Perform mutation
+            if (mutationMethod == 1)
+                performMutation(child);
+            else if (mutationMethod == 2)
+                performFlipTwoRandomPointsMutation(child);
+
+            // Add child to the new population
+            newPopulation[i] = child;
+        }
+
+        // Replace the old population with the new population
+        population = newPopulation;
+    }
+
+    // Find the individual with the minimum fitness (closest to the target sum)
+    int bestFitness = INT_MAX;
+    int bestIndividualIndex = -1;
+    for (int i = 0; i < populationSize; ++i)
+    {
+        int fitness = evaluateFitness(population[i], set, targetSum);
+        if (fitness < bestFitness)
+        {
+            bestFitness = fitness;
+            bestIndividualIndex = i;
+        }
+    }
+
+    // Return the best individual (subset)
+    return population[bestIndividualIndex];
 }
 
-// Test dla mutacji losowej
-void testMutateRandom()
+// Function to read a set from a file
+vector<int> readSetFromFile(string filename)
 {
-    vector<int> individual = {1, 0, 1, 0, 1};
+    vector<int> set;
 
-    cout << "Before mutation: ";
-    for (int gene : individual)
-        cout << gene << " ";
-    cout << endl;
+    ifstream inputFile(filename);
+    if (!inputFile)
+    {
+        cout << "Failed to open the file." << endl;
+        return set;
+    }
 
-    mutateRandom(individual);
+    string line;
+    if (getline(inputFile, line))
+    {
+        stringstream ss(line);
+        string number;
+        while (getline(ss, number, ','))
+        {
+            set.push_back(stoi(number));
+        }
+    }
+    inputFile.close();
 
-    cout << "After mutation: ";
-    for (int gene : individual)
-        cout << gene << " ";
-    cout << endl;
+    return set;
 }
 
-// Test dla warunku zakończenia: osiągnięcie zadanego dopasowania
-void testIsSubsetSum()
+int main(int argc, char* argv[])
 {
-    vector<int> subset = {1, 3, 5, 7, 9};
-    int targetSum = 12;
+    // Check if the required arguments are provided
+    if (argc < 6)
+    {
+        cout << "Usage: ./program <targetSum> <populationSize> <crossoverMethod> <mutationMethod> <terminationCondition>"
+             << endl;
+        return 0;
+    }
 
-    bool result = isSubsetSum(subset, targetSum);
+    // Parse the arguments from the command line
+    int targetSum = stoi(argv[1]);
+    int populationSize = stoi(argv[2]);
+    int crossoverMethod = stoi(argv[3]);
+    int mutationMethod = stoi(argv[4]);
+    int terminationCondition = stoi(argv[5]);
 
+    // Subset Sum problem inputs
+    vector<int> set = readSetFromFile("set.txt");
+
+    // Genetic algorithm parameters
+    int maxGenerations = 1000;
+
+    // Solve Subset Sum problem using genetic algorithm
+    vector<int> subset = solveSubsetSum(set, targetSum, populationSize, maxGenerations,
+                                        crossoverMethod, mutationMethod, terminationCondition);
+
+    // Print the resulting subset
     cout << "Subset: ";
     for (int element : subset)
         cout << element << " ";
-    cout << endl;
-
-    cout << "Target sum: " << targetSum << endl;
-    cout << "Result: " << (result ? "Subset sum achieved" : "Subset sum not achieved") << endl;
-}
-
-// Test dla warunku zakończenia: osiągnięcie maksymalnej liczby pokoleń
-void testIsMaxGenerationReached()
-{
-    int currentGeneration = 10;
-    int maxGeneration = 20;
-
-    bool result = isMaxGenerationReached(currentGeneration, maxGeneration);
-
-    cout << "Current generation: " << currentGeneration << endl;
-    cout << "Max generation: " << maxGeneration << endl;
-    cout << "Result: " << (result ? "Max generation reached" : "Max generation not reached") << endl;
-}
-
-int main()
-{
-    cout << "CrossoverSinglePoint:" << endl;
-    testCrossoverSinglePoint();
-    cout << endl;
-    cout << "CrossoverTwoPoints:" << endl;
-    testCrossoverTwoPoints();
-    cout << endl;
-    cout << "MutateSinglePoint:" << endl;
-    testMutateSinglePoint();
-    cout << endl;
-    cout << "MutateRandom:" << endl;
-    testMutateRandom();
-    cout << endl;
-    cout << "IsSubsetSum:" << endl;
-    testIsSubsetSum();
-    cout << endl;
-    cout << "isMaxGenerationReached:" << endl;
-    testIsMaxGenerationReached();
     cout << endl;
 
     return 0;

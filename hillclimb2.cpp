@@ -27,39 +27,7 @@ int calculateSubsetSum(const std::vector<int> &subset)
     return sum;
 }
 
-// Funkcja znajdująca losowego sąsiada spośród otoczenia przez zmianę jednego elementu na raz
-std::vector<int> findRandomNeighbor(const std::vector<int> &currentSubset, const std::vector<int> &set, int targetSum)
-{
-    std::vector<int> bestNeighbor = currentSubset;
-    int bestSum = calculateSubsetSum(currentSubset);
 
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_int_distribution<int> dis(0, currentSubset.size() - 1);
-
-    std::vector<std::vector<int>> neighbors;
-    for (int i = 0; i < currentSubset.size(); i++)
-    {
-        std::vector<int> neighbor = currentSubset;
-        neighbor[i] = (neighbor[i] == 0) ? 1 : 0; // Zmiana jednego elementu
-
-        neighbors.push_back(neighbor);
-    }
-
-    std::shuffle(neighbors.begin(), neighbors.end(), gen); // Losowe zamieszanie kolejności sąsiadów
-
-    for (const auto &neighbor : neighbors)
-    {
-        int neighborSum = calculateSubsetSum(neighbor);
-        if (std::abs(neighborSum - targetSum) < std::abs(bestSum - targetSum))
-        {
-            bestNeighbor = neighbor;
-            bestSum = neighborSum;
-        }
-    }
-
-    return bestNeighbor;
-}
 
 // Funkcja odczytująca zbiór z pliku
 std::vector<int> readSetFromFile(const std::string &filename)
@@ -88,60 +56,131 @@ std::vector<int> readSetFromFile(const std::string &filename)
     return set;
 }
 
+std::vector<int> deleteValueFromVector(std::vector<int> &vec, int value)
+{
+    std::vector<int> newDeletedItems;
+    for (int n : vec)
+    {
+        if (n != value)
+            newDeletedItems.push_back(n);
+    }
+    return newDeletedItems;
+}
+
+std::pair<std::vector<int>, std::vector<int>> generateRandomNeighbor(std::vector<int> randomNeighbor, std::vector<int>deletedItems){
+   
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<int> dist(0, randomNeighbor.size() - 1);
+
+    bool randomBool = dist(gen) % 2 == 0;
+    int randomIndex = dist(gen);
+
+    if (randomBool && deletedItems.empty())
+        randomBool = false;
+    
+    if (!randomBool && !(std::count(deletedItems.begin(), deletedItems.end(), randomNeighbor[randomIndex]) > 0))
+    {
+        if(randomNeighbor[randomIndex] == 0){
+            randomBool = true;
+        }
+        else{
+        deletedItems.push_back(randomNeighbor[randomIndex]);
+        randomNeighbor[randomIndex] = 0;
+        std::cout << "DELETE & NIE ISTNIEJE JESZCZE" << std::endl;
+        }
+    }
+
+    if (randomBool)
+    {    
+        // 1. pobierz randomowy element z deleted
+        std::uniform_int_distribution<int> dist(0, deletedItems.size() - 1);
+        int randomDeletedIndex = dist(gen);
+
+        int item_from_deleted = deletedItems[randomDeletedIndex];
+        int item_from_current = randomNeighbor[randomIndex];
+
+        std::cout << "PICKED DELETED : " << item_from_deleted << std::endl;
+        // 2. Usun wybranca z usunietych
+        deletedItems = deleteValueFromVector(deletedItems, item_from_deleted);
+        
+        // 2. jezeli element !=0 i nie ma go w deleted to dodaj do deleted
+        if (randomNeighbor[randomIndex] != 0)
+            deletedItems.push_back(item_from_current);
+            
+        // 3. podmien na randomowy usuniety
+        randomNeighbor[randomIndex] = item_from_deleted;
+    }
+
+    return std::make_pair(randomNeighbor, deletedItems);
+}
+
 // Funkcja rozwiązująca problem sumy podzbioru przy użyciu algorytmu hill climbing
-std::vector<int> solveSubsetSumProblem(const std::vector<int> &set, int targetSum, int maxIterations)
+std::vector<int> solveSubsetSumProblem(const std::vector<int> &set, int targetSum, int max_iterations)
 {
     std::vector<int> currentSubset = generateSubset(set, set.size());
-
-    int iterations = 0;
-    while (calculateSubsetSum(currentSubset) != targetSum && iterations < maxIterations)
+    std::vector<int> deletedItems;
+    int iteration = 0;
+    while (iteration < max_iterations)
     {
-        std::vector<int> nextSubset = findRandomNeighbor(currentSubset, set, targetSum);
-        if (calculateSubsetSum(nextSubset) >= calculateSubsetSum(currentSubset))
+
+        std::pair<std::vector<int>, std::vector<int>>  randomPair= generateRandomNeighbor(currentSubset, deletedItems);
+        std::vector<int> randomNeighbor = randomPair.first;
+        std::vector<int> newDeletedItems = randomPair.second;
+
+        currentSubset = randomNeighbor;
+        deletedItems = newDeletedItems;
+
+        std::cout << iteration + 1 << std::endl;
+        std::cout << "CURRENT : ";
+        for (int c : currentSubset)
         {
-            break; // Osiągnięto lokalne optimum, zatrzymaj
+            std::cout << c << ", ";
         }
-        currentSubset = nextSubset;
-        iterations++;
-    }
-
-    if (calculateSubsetSum(currentSubset) == targetSum)
-    {
-        // Usuwanie zer z podzbioru
-        std::vector<int> finalSubset;
-        for (int num : currentSubset)
+        std::cout << std::endl;
+     
+        std::cout << "DELETED : ";
+        for (int d : deletedItems)
         {
-            if (num != 0)
-            {
-                finalSubset.push_back(num);
+            std::cout << d << ", ";
+            if(d == 0){
+                return {};
             }
         }
-        return finalSubset;
+        std::cout << std::endl;
+        std::cout <<"SUM : "<< calculateSubsetSum(currentSubset)<< std::endl;
+
+
+        if(calculateSubsetSum(currentSubset) == targetSum){
+            return currentSubset;
+        }
+
+        iteration++;
+        std::cout << std::endl;
+        std::cout << std::endl;
     }
-    else
-    {
-        return {}; // Zwróć pusty wektor, aby wskazać, że nie można znaleźć podzbioru o żądanej sumie
-    }
+
+    return {};
 }
 
 int main(int argc, char *argv[])
 {
-    // Sprawdzenie, czy targetSum i maxIterations są podane jako argumenty wiersza poleceń
+    // Sprawdzenie, czy targetSum jest podane jako argument wiersza poleceń
     if (argc < 3)
     {
-        std::cout << "Podaj żądaną sumę i maksymalną liczbę iteracji: ./program <targetSum> <maxIterations>" << std::endl;
+        std::cout << "Podaj żądaną sumę: ./program <targetSum> <numOfIterations>" << std::endl;
         return 0;
     }
 
-    // Parsowanie targetSum i maxIterations z argumentów wiersza poleceń
+    // Parsowanie targetSum z argumentu wiersza poleceń
     int targetSum = std::stoi(argv[1]);
-    int maxIterations = std::stoi(argv[2]);
+    int maxIter = std::stoi(argv[2]);
 
     // Odczytanie zbioru z pliku
     std::vector<int> set = readSetFromFile("set.txt");
 
     // Przykładowe użycie
-    std::vector<int> subset = solveSubsetSumProblem(set, targetSum, maxIterations);
+    std::vector<int> subset = solveSubsetSumProblem(set, targetSum, maxIter);
 
     if (subset.empty())
     {
